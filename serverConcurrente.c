@@ -11,7 +11,7 @@
 #include <pthread.h>
 #include <stdbool.h>
 
-#define NUM_THREADS 7
+#define NUM_THREADS 3
 pthread_mutex_t m;
 pthread_cond_t c;
 int busy = false;
@@ -26,7 +26,7 @@ void tratar_peticion(int *sc){
     pthread_cond_signal(&c);
     pthread_mutex_unlock(&m);
 
-        
+    //Si queremos que cada hilo al cerrarse diga quien se ha cerrado: getpeername() 
     //Ahora hacemos la parte que es "espejo" del cliente
     while(1){
         readLine(s_local, buffer, 256);
@@ -35,14 +35,14 @@ void tratar_peticion(int *sc){
             break;
         } 
     } 
-    close(*sc);
+    close(s_local);
     pthread_exit(NULL);
 }
 
 
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]){
+
     int sd;
     int val;
     int err;
@@ -52,12 +52,13 @@ int main(int argc, char *argv[])
     int sc;
         
     pthread_attr_t attr;
-    pthread_t thid[NUM_THREADS];
+    pthread_t thid;
 
     pthread_mutex_init(&m, NULL);
     pthread_cond_init(&c, NULL);
     pthread_attr_init(&attr);
 
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
 
     sd =  socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -96,15 +97,15 @@ int main(int argc, char *argv[])
     while(1){
         printf("Esperando conexion\n");
         //busy == false inicialmente
-        for(int j = 0; j < NUM_THREADS; j++){
-            if(pthread_create(&thid[j], &attr, (void *)tratar_peticion, &sc) == 0){ 
-                sc = accept(sd, (struct sockaddr *)&client_addr, (socklen_t *) &size);
-                if(sc == -1){
-                    printf("Error en el accept\n");
-                    return(-1);
-                }
+        sc = accept(sd, (struct sockaddr *)&client_addr, (socklen_t *) &size);
+        if(sc == -1){
+            printf("Error en el accept\n");
+            return(-1);
+        }
+            if(pthread_create(&thid, &attr, tratar_peticion, (void *)&sc) == 0){ 
+                
                 printf("Conexion aceptada de IP: %s y puerto: %d\n", 
-                                        inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+                        inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
                 pthread_mutex_lock(&m);
                 while(busy == false){  
                     pthread_cond_wait(&c, &m);                        
@@ -115,10 +116,7 @@ int main(int argc, char *argv[])
                 printf("Error al crear el thread");
                 return(-1);
             }
-        }
-        for(int k = 0; k < NUM_THREADS; k++){
-            pthread_join(thid[k], NULL);
-        }
+        
          
     }
 
